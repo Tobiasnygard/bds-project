@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>📷 이미지 분류 결과 보기</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+        img { height: 100px; }
+    </style>
+</head>
+<body>
+    <h1>📊 이미지 분류 결과</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>파일명</th>
+                <th>라벨</th>
+                <th>이미지</th>
+                <th>시간</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for img in images %}
+            <tr>
+                <td>{{ img.filename }}</td>
+                <td>{{ img.label }}</td>
+                <td>
+                    {% if img.path %}
+                        <img src="{{ img.path }}">
+                    {% else %}
+                        <em>파일 없음</em>
+                    {% endif %}
+                </td>
+                <td>{{ img.timestamp }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
