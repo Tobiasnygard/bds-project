@@ -1,0 +1,1 @@
+# Optional: save images locally OR to hdfs
