@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sports Image Classifier</title>
+</head>
+<body>
+    <h1>Classified Sports Images</h1>
+    <table border="1">
+        <tr>
+            <th>Image</th>
+            <th>Classification</th>
+        </tr>
+        {% for row in data %}
+        <tr>
+            <td><img src="{{ row[0] }}" width="100"></td>
+            <td>{{ row[1] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
