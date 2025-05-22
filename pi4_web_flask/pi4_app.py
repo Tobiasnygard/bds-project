@@ -7,7 +7,7 @@ app = Flask(__name__)
 def get_data():
     conn = pymysql.connect(host='mariadb', user='piuser', password='password', db='sportsdb')
     cursor = conn.cursor()
-    cursor.execute("SELECT url, source, classification, timestamp FROM images ORDER BY timestamp DESC")
+    cursor.execute("SELECT url, classification FROM images ORDER BY timestamp ASC")
     rows = cursor.fetchall()
     conn.close()
     return rows
