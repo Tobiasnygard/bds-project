@@ -1,0 +1,1 @@
+# Kafka consumer to get images
