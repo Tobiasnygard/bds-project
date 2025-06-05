@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   zookeeper:
@@ -44,6 +44,8 @@ services:
     depends_on:
       - kafka
       - mariadb
+    volumes:
+      - images_data:/app/images
 
   flaskapp:
     build: ./pi4_web_flask
@@ -51,6 +53,9 @@ services:
       - "6969:5000"
     depends_on:
       - mariadb
+    volumes:
+      - images_data:/app/images
 
 volumes:
   mariadb_data:
+  images_data:

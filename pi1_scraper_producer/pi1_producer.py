@@ -1,45 +1,121 @@
+import random
 import requests
 from bs4 import BeautifulSoup
 from kafka import KafkaProducer
 import json
 import base64
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
+import hashlib
+import time
+import urllib3
+import os
+from datetime import datetime
 
-# Initialize Kafka producer to send messages to localhost
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# 저장 경로
+SAVE_DIR = "producer_images"
+os.makedirs(SAVE_DIR, exist_ok=True)
+
+# 중복 해시 저장 파일
+HASH_FILE = "sent_hashes.txt"
+if os.path.exists(HASH_FILE):
+    with open(HASH_FILE, 'r') as f:
+        sent_hashes = set(f.read().splitlines())
+else:
+    sent_hashes = set()
+
 producer = KafkaProducer(
     bootstrap_servers=['kafka:9092'],
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
 
-def scrape_bing_images():
-    base_url = 'https://www.bing.com'
-    url = 'https://www.bing.com/images/ideas/sports?nvid=41&FORM=IFPCOD'
-    headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, 'html.parser')
-    images = soup.find_all('img')
+def hash_image(image_data):
+    return hashlib.md5(image_data).hexdigest()
 
-    for img in images[:100]:
-        img_url = img.get('src')
+def is_valid_image_url(url):
+    parsed = urlparse(url)
+    return parsed.scheme in ('http', 'https') and not url.lower().endswith('.svg')
+
+def get_image_data(url):
+    try:
+        response = requests.get(url, verify=False, timeout=10)
+        if response.status_code == 200:
+            return response.content
+    except Exception:
+        return None
+
+def scrape_images_and_send():
+    search_terms = ['sports', 'tennis', 'football', 'basketball', 'swimming']
+    query = random.choice(search_terms)
+    url = f'https://www.bing.com/images/search?q={query}&form=HDRSC3'
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    try:
+        res = requests.get(url, headers=headers, verify=False, timeout=10)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        images = soup.find_all('img')
+    except Exception as e:
+        print(f"❌ Failed to fetch or parse the page: {e}")
+        return
+
+    new_images_sent = 0
+    for img in images:
+        if new_images_sent >= 10:
+            break
+
+        img_url = img.get('src') or img.get('data-src')
         if not img_url:
             continue
-        if img_url.startswith("data:"): # Skip base64 images
-            continue
-        if img_url.startswith('/'):
-            img_url = urljoin(base_url, img_url)
-        try:
-            img_data = requests.get(img_url).content
-            message = {
-                'url': img_url,
-                'source': 'bing',
-                'image_data': base64.b64encode(img_data).decode('utf-8')
-            }
-            producer.send('sports_images', message)
-            print(f"Sent image from {img_url}")
-        except Exception as e:
-            print(f"Failed to process {img_url}: {e}")
-    
-    producer.flush()
-    producer.close()
 
-scrape_bing_images()
+        if img_url.startswith('/'):
+            img_url = urljoin(url, img_url)
+
+        if not is_valid_image_url(img_url):
+            continue
+
+        image_data = get_image_data(img_url)
+        if not image_data or len(image_data) < 1024:
+            print(f"[⚠️] Skipped small/broken image: {img_url} ({len(image_data) if image_data else 0} bytes)")
+            continue
+
+        img_hash = hash_image(image_data)
+        if img_hash in sent_hashes:
+            print(f"[⏩] Skipped duplicate image: {img_url}")
+            continue
+
+        # 저장
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        filename = f"{query}_{timestamp}.jpg"
+        save_path = os.path.join(SAVE_DIR, filename)
+        try:
+            with open(save_path, 'wb') as f:
+                f.write(image_data)
+            print(f"[💾] Saved locally: {save_path}")
+        except Exception as e:
+            print(f"[❌] Failed to save image: {e}")
+            continue
+
+        message = {
+            'url': img_url,
+            'source': 'bing',
+            'image_data': base64.b64encode(image_data).decode('utf-8')
+        }
+        try:
+            producer.send('sports_images', message)
+            sent_hashes.add(img_hash)
+            with open(HASH_FILE, 'a') as f:
+                f.write(img_hash + "\n")
+            new_images_sent += 1
+            print(f"✅ Sent image from {img_url}")
+        except Exception as e:
+            print(f"[❌] Failed to send image: {e}")
+
+def run_periodic_scraper(interval=600):
+    while True:
+        print("\n🚀 Starting new scraping cycle...")
+        scrape_images_and_send()
+        print(f"😴 Cycle completed. Sleeping for {interval} seconds....\n")
+        time.sleep(interval)
+
+run_periodic_scraper(interval=10)
