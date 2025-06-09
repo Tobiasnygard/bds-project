@@ -14,4 +14,4 @@ COPY . .
 # Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "consumer.py"]
+CMD ["python", "-u", "pi3_consumer.py"]

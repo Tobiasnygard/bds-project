@@ -13,17 +13,7 @@ from datetime import datetime
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 저장 경로
-SAVE_DIR = "producer_images"
-os.makedirs(SAVE_DIR, exist_ok=True)
-
-# 중복 해시 저장 파일
-HASH_FILE = "sent_hashes.txt"
-if os.path.exists(HASH_FILE):
-    with open(HASH_FILE, 'r') as f:
-        sent_hashes = set(f.read().splitlines())
-else:
-    sent_hashes = set()
+sent_hashes = set()
 
 producer = KafkaProducer(
     bootstrap_servers=['kafka:9092'],
@@ -84,18 +74,6 @@ def scrape_images_and_send():
             print(f"[⏩] Skipped duplicate image: {img_url}")
             continue
 
-        # 저장
-        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        filename = f"{query}_{timestamp}.jpg"
-        save_path = os.path.join(SAVE_DIR, filename)
-        try:
-            with open(save_path, 'wb') as f:
-                f.write(image_data)
-            print(f"[💾] Saved locally: {save_path}")
-        except Exception as e:
-            print(f"[❌] Failed to save image: {e}")
-            continue
-
         message = {
             'url': img_url,
             'source': 'bing',
@@ -104,10 +82,8 @@ def scrape_images_and_send():
         try:
             producer.send('sports_images', message)
             sent_hashes.add(img_hash)
-            with open(HASH_FILE, 'a') as f:
-                f.write(img_hash + "\n")
             new_images_sent += 1
-            print(f"✅ Sent image from {img_url}")
+            print(f"✅ Sent to kafka: {img_url}")
         except Exception as e:
             print(f"[❌] Failed to send image: {e}")
 

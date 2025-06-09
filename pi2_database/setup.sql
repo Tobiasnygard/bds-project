@@ -1,3 +1,5 @@
+CREATE DATABASE IF NOT EXISTS sportsdb;
+
 USE sportsdb;
 
 CREATE TABLE images (
@@ -5,7 +7,7 @@ CREATE TABLE images (
     url TEXT,
     source VARCHAR(50),
     classification VARCHAR(100),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    image_blob LONGBLOB NOT NULL
 );
 
 GRANT ALL PRIVILEGES ON sportsdb.* TO 'piuser'@'%' IDENTIFIED BY 'password';

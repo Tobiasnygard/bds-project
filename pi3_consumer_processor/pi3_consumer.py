@@ -1,55 +1,64 @@
 from kafka import KafkaConsumer
 import json
 import base64
-import os
+import time
 from datetime import datetime
+import sys
+
 import pymysql
 from PIL import Image
 from io import BytesIO
 import numpy as np
 from tflite_runtime.interpreter import Interpreter
 
-# Load TFLite model
+# ─── 1. LOAD MODEL & LABELS ────────────────────────────────────────────────────
+
 interpreter = Interpreter(model_path="mobilenet_v1_1.0_224.tflite")
 interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# Load labels
 with open("labels.txt", "r") as f:
     labels = [line.strip() for line in f.readlines()]
 
-# Only consider these sports categories
 sports_keywords = {"basketball", "soccer", "tennis", "baseball", "football", "swimming"}
 sports_label_indices = [
     i for i, label in enumerate(labels)
     if any(keyword in label.lower() for keyword in sports_keywords)
 ]
 
-# Kafka Consumer — Docker-safe host
-consumer = KafkaConsumer(
-    'sports_images',
-    bootstrap_servers=['kafka:9092'],
-    value_deserializer=lambda v: json.loads(v.decode('utf-8'))
-)
+# ─── 2. KAFKA CONSUMER SETUP ────────────────────────────────────────────────────
+try:
+    consumer = KafkaConsumer(
+        'sports_images',
+        bootstrap_servers=['kafka:9092'],
+        value_deserializer=lambda v: json.loads(v.decode('utf-8'))
+    )
+    print("[ℹ️] Connected to Kafka broker.")
+except KafkaError as e:
+    print(f"[❌] Kafka error when trying to connect: {e}")
+    print(f"Shutting down consumer, please restart it maunally")
+    sys.exit(1)
 
-# MariaDB connection — Docker-safe host
-conn = pymysql.connect(
-    host='mariadb',
-    user='piuser',
-    password='password',
-    db='sportsdb',
-    port=3306
-)
-cursor = conn.cursor()
+# ─── 3. DB CONNECTION HELPERS ──────────────────────────────────────────────────
 
-# Image folders
-raw_dir = "images/raw"
-classified_dir = "images/classified"
-os.makedirs(raw_dir, exist_ok=True)
-os.makedirs(classified_dir, exist_ok=True)
+def make_db_connection():
+    return pymysql.connect(
+        host='mariadb',
+        user='piuser',
+        password='password',
+        db='sportsdb'
+    )
 
-# Classify image using MobileNet
+try:
+    conn = make_db_connection()
+    print("[ℹ️] MariaDB connection established.")
+except pymysql.MySQLError as e:
+    print(f"[❌] Could not connect to MariaDB at startup: {e}")
+    print(f"Shutting down consumer, please restart it maunally")
+
+# ─── 4. IMAGE CLASSIFICATION FUNCTION ─────────────────────────────────────────
+
 def classify_image(image_bytes):
     image = Image.open(BytesIO(image_bytes)).convert("RGB")
     image = image.resize((224, 224))
@@ -60,65 +69,96 @@ def classify_image(image_bytes):
     top_index = max(sports_label_indices, key=lambda i: output_data[i])
     return labels[top_index], output_data[top_index]
 
-# Start consuming messages
-for msg in consumer:
-    data = msg.value
-    print("[📩] Received message")
+# ─── 5. MAIN CONSUMER LOOP ────────────────────────────────────────────────────
 
-    if 'image_data' not in data:
-        print("[⚠️] Skipping message: 'image_data' missing.")
-        continue
+def consumer_loop():
+    global conn
 
-    img_bytes = base64.b64decode(data['image_data'])
+    for msg in consumer:
+        data = msg.value
+        print("[📩] Received message")
 
-    if len(img_bytes) < 1024:
-        print(f"[⚠️] Skipping image: too small ({len(img_bytes)} bytes)")
-        continue
+        # A: Reconnect if needed
+        if conn is None or not conn.open:
+            try:
+                conn = make_db_connection()
+                print("[ℹ️] Reconnected to MariaDB.")
+            except pymysql.MySQLError as e:
+                print(f"[⚠️] Failed to reconnect to MariaDB: {e}. Sleeping 5s.")
+                time.sleep(5)
+                continue
 
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    raw_filename = f"{timestamp}.jpg"
-    raw_path = os.path.join(raw_dir, raw_filename)
+        # B: Ensure 'image_data'
+        if 'image_data' not in data:
+            print("[⚠️] Skipping message: 'image_data' missing.")
+            continue
 
+        # C: Decode Base64 → raw bytes
+        try:
+            img_bytes = base64.b64decode(data['image_data'])
+        except Exception as e:
+            print(f"[❌] Base64 decode error: {e}")
+            continue
+
+        if len(img_bytes) < 1024:
+            print(f"[⚠️] Skipping image: too small ({len(img_bytes)} bytes).")
+            continue
+
+        # D: Classify
+        try:
+            label, confidence = classify_image(img_bytes)
+            print(f"[🧠] Classification: {label} ({confidence:.2f})")
+        except Exception as e:
+            print(f"[❌] Classification error: {e}")
+            continue
+
+        # If below threshold, tag as 'skipped' instead of skipping outright
+        if confidence >= 0.01:
+            classification = label
+        else:
+            classification = 'skipped'
+            print(f"[⚠️] Low confidence ({confidence:.2f}), tagging as 'skipped'")
+
+        # E: Insert into MariaDB
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO images
+                      (url, source, classification, image_blob)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        data.get('url', 'N/A'),
+                        data.get('source', 'unknown'),
+                        classification,
+                        img_bytes
+                    )
+                )
+                conn.commit()
+
+                new_id = cursor.lastrowid
+                print(f"[✅] Inserted row id={new_id} → {classification}")
+        except pymysql.MySQLError as e:
+            conn.rollback()
+            print(f"[❌] DB insert error: {e}")
+            # If lost connection
+            if e.args[0] in (2006, 2013):
+                print("[⚠️] Lost DB connection; will reconnect next iteration.")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+
+if __name__ == '__main__':
     try:
-        classification, confidence = classify_image(img_bytes)
-        print(f"[🧠] Classification: {classification} ({confidence:.2f})")
-    except Exception as e:
-        print(f"[❌] Classification error: {e}")
-        continue
-
-    if confidence < 0.3:
-        print(f"[⚠️] Low confidence ({confidence:.2f}), skipping image.")
-        continue
-
-    try:
-        with open(raw_path, 'wb') as f:
-            f.write(img_bytes)
-        print(f"[💾] Saved image: {raw_filename}")
-    except Exception as e:
-        print(f"[❌] Failed to save raw image: {e}")
-        continue
-
-    classified_filename = f"{classification}_{timestamp}.jpg"
-    classified_path = os.path.join(classified_dir, classified_filename)
-
-    try:
-        os.rename(raw_path, classified_path)
-        print(f"[📦] Moved image to: {classified_path}")
-    except Exception as e:
-        print(f"[❌] Failed to move image: {e}")
-        continue
-
-    try:
-        cursor.execute(
-            "INSERT INTO images (url, source, classification, filename) VALUES (%s, %s, %s, %s)",
-            (
-                data.get('url', 'N/A'),
-                data.get('source', 'unknown'),
-                classification,
-                classified_filename
-            )
-        )
-        conn.commit()
-        print(f"[✅] Inserted into DB: {classified_filename} → {classification}")
-    except Exception as e:
-        print(f"[❌] DB insert error: {e}")
+        consumer_loop()
+    except KeyboardInterrupt:
+        print("\n[ℹ️] Interrupted by user, shutting down...")
+    finally:
+        if conn is not None and conn.open:
+            conn.close()
+            print("[ℹ️] MariaDB connection closed.")
+        consumer.close()
+        print("[ℹ️] Kafka consumer closed.")

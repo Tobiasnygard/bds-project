@@ -1,5 +1,5 @@
+numpy<2.0
 kafka-python
 pymysql
 pillow
-numpy
 tflite-runtime

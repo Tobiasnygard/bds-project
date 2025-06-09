@@ -30,12 +30,7 @@
           type="checkbox"
           name="classified_only"
           value="1"
-          {%
-          if
-          classified_only
-          %}checked{%
-          endif
-          %}
+          {% if classified_only %}checked{% endif %}
         />
         Show only classified
       </label>
@@ -45,13 +40,20 @@
     <div class="image-grid">
       {% for item in images %}
       <div class="image-item">
+        <!-- 
+          Instead of using a filename, we now serve by auto-increment ID:
+          url_for('serve_image', image_id=item.id) 
+        -->
         <img
-          src="{{ url_for('image', filename=item.filename) }}"
+          src="{{ url_for('serve_image', image_id=item.id) }}"
           width="200"
         /><br />
+        <!-- 
+          The label is now in item.classification (no more item.label or item.filename)
+        -->
         <span
-          class="label-{{ 'classified' if item.label != 'skipped' else 'skipped' }}"
-          >{{ item.label }}</span
+          class="label-{{ 'classified' if item.classification != 'skipped' else 'skipped' }}"
+          >{{ item.classification }}</span
         >
       </div>
       {% endfor %}
@@ -60,13 +62,14 @@
     <div style="margin-top: 20px">
       {% if page > 1 %}
       <a
-        href="{{ url_for('index', page=page-1, classified_only=classified_only|string|lower) }}"
+        href="{{ url_for('index', page=page-1, classified_only= (1 if classified_only else 0)) }}"
         >« Prev</a
       >
-      {% endif %} Page {{ page }} of {{ total_pages }} {% if page < total_pages
-      %}
+      {% endif %} 
+      Page {{ page }} of {{ total_pages }} 
+      {% if page < total_pages %}
       <a
-        href="{{ url_for('index', page=page+1, classified_only=classified_only|string|lower) }}"
+        href="{{ url_for('index', page=page+1, classified_only= (1 if classified_only else 0)) }}"
         >Next »</a
       >
       {% endif %}
