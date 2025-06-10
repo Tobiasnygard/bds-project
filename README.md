@@ -16,9 +16,25 @@ This project sets up a distributed system for web scraping, image classification
 
 ---
 
-To build and start all services run from root folder:
+**How to run the project (locally)**
 
-docker-compose up --build
+The project is dockerized, so please download docker desktop if you do not already have it installed. https://www.docker.com/products/docker-desktop/
+
+1. Start up docker desktop on your computer.
+
+2. Open a terminal and run docker-compose up --build
+
+Wait until the project is built (when the terminal stops spitting out new lines)
+
+3. Open a new terminal and run docker-compose up consumer
+
+Check the output in the terminal, you might have to re-run the command if the consumer runs into an issue with the kafka topic, but restarting it should fix it.
+
+4. Open a new terminal and run docker-compose up scraper
+
+Everything should be up and running on http://localhost:6969
+
+If there are any issues you can run docker-compose ps -a to check all running and stopped containers. If any containers are stopped, simply restart them by doing docker-compose up *container name*
 
 ---
 
