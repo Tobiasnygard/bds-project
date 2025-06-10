@@ -10,5 +10,13 @@ CREATE TABLE images (
     image_blob LONGBLOB NOT NULL
 );
 
+CREATE OR REPLACE VIEW classification_counts AS
+  SELECT
+    classification,
+    COUNT(*) AS num_images
+  FROM images
+  GROUP BY classification;
+
+
 GRANT ALL PRIVILEGES ON sportsdb.* TO 'piuser'@'%' IDENTIFIED BY 'password';
 FLUSH PRIVILEGES;

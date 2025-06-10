@@ -1,4 +1,6 @@
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaAdminClient
+from kafka.admin import NewTopic
+from kafka.errors import TopicAlreadyExistsError, NoBrokersAvailable
 import json
 import base64
 import time
@@ -28,6 +30,25 @@ sports_label_indices = [
 ]
 
 # ─── 2. KAFKA CONSUMER SETUP ────────────────────────────────────────────────────
+def ensure_topic():
+    try:
+        admin = KafkaAdminClient(bootstrap_servers=['kafka:9092'])
+    except NoBrokersAvailable as e:
+        print(f"[❌] Kafka not available: {e}")
+        sys.exit(1)
+
+    topic = NewTopic(name='sports_images', num_partitions=1, replication_factor=1)
+    try:
+        admin.create_topics([topic])
+        print(f"[✅] Created topic 'sports_images', continuing..")
+    except TopicAlreadyExistsError:
+        print(f"[ℹ️] Topic 'sports_images' already exists, continuing..")
+    except Exception as e:
+        print(f"[❌] Error creating topic: {e}, shutting down consumer, please restart manually.")
+        sys.exit(1)
+    finally:
+        admin.close()
+
 try:
     consumer = KafkaConsumer(
         'sports_images',
@@ -153,6 +174,7 @@ def consumer_loop():
 
 if __name__ == '__main__':
     try:
+        ensure_topic()
         consumer_loop()
     except KeyboardInterrupt:
         print("\n[ℹ️] Interrupted by user, shutting down...")

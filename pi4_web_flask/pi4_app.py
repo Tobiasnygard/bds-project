@@ -83,5 +83,19 @@ def serve_image(image_id):
     # Assuming all stored images are JPEG; if you store mixed types, you could add a 'mime_type' column
     return Response(blob, mimetype='image/jpeg')
 
+@app.route('/stats')
+def stats():
+    conn = get_db_connection()
+    with conn.cursor() as cursor:
+        cursor.execute("""
+            SELECT classification, COUNT(*) AS num_images
+            FROM images
+            GROUP BY classification
+            ORDER BY num_images DESC
+        """)
+        stats = cursor.fetchall()
+    conn.close()
+    return render_template('stats.html', stats=stats)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
