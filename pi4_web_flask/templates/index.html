@@ -1,21 +1,82 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <title>Sports Image Classifier</title>
-</head>
-<body>
-    <h1>Classified Sports Images</h1>
-    <table border="1">
-        <tr>
-            <th>Image</th>
-            <th>Classification</th>
-        </tr>
-        {% for row in data %}
-        <tr>
-            <td><img src="{{ row[0] }}" width="100"></td>
-            <td>{{ row[1] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Image Viewer</title>
+    <style>
+      .image-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .image-item {
+        width: 200px;
+        text-align: center;
+      }
+      .label-skipped {
+        color: red;
+      }
+      .label-classified {
+        color: green;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📷 Sports Image Viewer</h1>
+    <nav>
+      <a href="{{ url_for('index') }}">Home</a>
+      |
+      <a href="{{ url_for('stats') }}">Stats</a>
+    </nav>
+    <form method="get" action="/">
+      <label>
+        <input
+          type="checkbox"
+          name="classified_only"
+          value="1"
+          {% if classified_only %}checked{% endif %}
+        />
+        Show only classified
+      </label>
+      <button type="submit">Apply</button>
+    </form>
+
+    <div class="image-grid">
+      {% for item in images %}
+      <div class="image-item">
+        <!-- 
+          Instead of using a filename, we now serve by auto-increment ID:
+          url_for('serve_image', image_id=item.id) 
+        -->
+        <img
+          src="{{ url_for('serve_image', image_id=item.id) }}"
+          width="200"
+        /><br />
+        <!-- 
+          The label is now in item.classification (no more item.label or item.filename)
+        -->
+        <span
+          class="label-{{ 'classified' if item.classification != 'skipped' else 'skipped' }}"
+          >{{ item.classification }}</span
+        >
+      </div>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top: 20px">
+      {% if page > 1 %}
+      <a
+        href="{{ url_for('index', page=page-1, classified_only= (1 if classified_only else 0)) }}"
+        >« Prev</a
+      >
+      {% endif %} 
+      Page {{ page }} of {{ total_pages }} 
+      {% if page < total_pages %}
+      <a
+        href="{{ url_for('index', page=page+1, classified_only= (1 if classified_only else 0)) }}"
+        >Next »</a
+      >
+      {% endif %}
+    </div>
+  </body>
 </html>

@@ -1,4 +1,0 @@
-kafka-python
-pymysql
-sqlalchemy
-tensorflow  # or torch if you’re using PyTorch

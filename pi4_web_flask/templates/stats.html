@@ -1,0 +1,17 @@
+<h2>Image Counts by Label</h2>
+<nav>
+  <a href="{{ url_for('index') }}">Home</a>
+  |
+  <a href="{{ url_for('stats') }}">Stats</a>
+</nav>
+<table>
+  <thead><tr><th>Label</th><th>Count</th></tr></thead>
+  <tbody>
+    {% for row in stats %}
+      <tr>
+        <td>{{ row.classification }}</td>
+        <td>{{ row.num_images }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
