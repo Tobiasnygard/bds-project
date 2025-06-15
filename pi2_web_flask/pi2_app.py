@@ -1,4 +1,4 @@
-# pi4_app.py
+# pi2_app.py
 
 from flask import Flask, render_template, request, make_response, Response, url_for
 import pymysql

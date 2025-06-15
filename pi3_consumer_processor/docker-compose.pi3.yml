@@ -1,0 +1,32 @@
+version: "3"
+services:
+  mariadb:
+    image: mariadb
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sportsdb
+      MYSQL_USER: piuser
+      MYSQL_PASSWORD: password
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./pi3_consumer_processor/setup.sql:/docker-entrypoint-initdb.d/setup.sql:ro
+
+  consumer:
+    build: ./pi3_consumer_processor
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: 172.21.149.248:9092 # PI1 IP
+      DB_HOST: localhost
+      DB_USER: piuser
+      DB_PASS: password
+      DB_NAME: sportsdb
+    depends_on:
+      - mariadb
+    volumes:
+      - images_data:/app/images
+
+volumes:
+  mariadb_data:
+  images_data:

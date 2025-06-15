@@ -2,4 +2,4 @@ FROM python:3.10-slim
 WORKDIR /app
 COPY . .
 RUN pip install -r requirements.txt
-CMD ["python", "pi4_app.py"]
+CMD ["python", "pi2_app.py"]
