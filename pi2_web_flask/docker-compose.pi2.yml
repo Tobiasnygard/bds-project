@@ -1,0 +1,13 @@
+version: "3"
+services:
+  flaskapp:
+    build: ./pi4_web_flask
+    ports:
+      - "6969:5000"
+    environment:
+      DB_HOST: <PI3_IP>
+      DB_USER: piuser
+      DB_PASS: password
+      DB_NAME: sportsdb
+    volumes:
+      - images_data:/app/images
